@@ -37,6 +37,9 @@ func MoveImage(ctx context.Context, d D) error {
 
 func downloadImage(url string) (io.Reader, error) {
 	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
 	return resp.Body, err
 }
 
