@@ -3,7 +3,6 @@ package p
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,35 +14,25 @@ import (
 	"github.com/containers/image/v5/types"
 )
 
-// MoveImage downloads the image from url and pushes it to repository configured by env vars
-func MoveImage(w http.ResponseWriter, r *http.Request) {
-	var d struct {
-		Url string `json:"url"`
-		Tag string `json:"tag"`
-	}
+type D struct {
+	Url string `json:"url"`
+	Tag string `json:"tag"`
+}
 
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - malformed json"))
-		return
-	}
+// MoveImage downloads the image from url and pushes it to repository configured by env vars
+func MoveImage(ctx context.Context, d D) error {
+
 	if d.Url == "" || d.Tag == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - missing arguments"))
-		return
+		return fmt.Errorf("missing arguments")
 	}
 
 	imageReader, err := downloadImage(d.Url)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Failed to download image from %s: %s", d.Url, err.Error())
+		return fmt.Errorf("Failed to download image from %s: %s", d.Url, err.Error())
 	}
 
 	err = copyImage(imageReader, d.Tag)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Failed to copy image: %s", err.Error())
-	}
+	return err
 }
 
 func downloadImage(url string) (io.Reader, error) {

@@ -1,12 +1,11 @@
 package main
 
 import (
-	"net/http"
+	"github.com/aws/aws-lambda-go/lambda"
 
 	"github.com/nebril/image-pusher/p"
 )
 
 func main() {
-	http.HandleFunc("/move", p.MoveImage)
-	http.ListenAndServe(":8080", nil)
+	lambda.Start(p.MoveImage)
 }
