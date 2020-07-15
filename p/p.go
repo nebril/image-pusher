@@ -57,7 +57,7 @@ func copyImage(image io.Reader, tag string) error {
 		return fmt.Errorf("TARGET_PWD env var not set")
 	}
 
-	policy, err := signature.DefaultPolicy(nil)
+	policy, err := signature.NewPolicyFromFile("policy.json")
 	if err != nil {
 		return err
 	}
