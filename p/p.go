@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 
@@ -57,6 +58,15 @@ func copyImage(image io.Reader, tag string) error {
 		return fmt.Errorf("TARGET_PWD env var not set")
 	}
 
+	imgBuffer, err := ioutil.ReadAll(image)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile("/tmp/image", imgBuffer, 0644)
+	if err != nil {
+		return err
+	}
+
 	policy, err := signature.NewPolicyFromFile("policy.json")
 	if err != nil {
 		return err
@@ -71,7 +81,7 @@ func copyImage(image io.Reader, tag string) error {
 		return err
 	}
 
-	srcRef, err := alltransports.ParseImageName("docker-archive:image")
+	srcRef, err := alltransports.ParseImageName("docker-archive:/tmp/image")
 
 	dstDockerAuth := &types.DockerAuthConfig{
 		Username: username,
