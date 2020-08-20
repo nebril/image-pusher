@@ -2,6 +2,7 @@
 package p
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/containers/image/v5/copy"
 	"github.com/containers/image/v5/signature"
@@ -53,7 +56,18 @@ func MoveImage(ctx context.Context, i Invocation) error {
 }
 
 func downloadImage(url string) (io.Reader, error) {
-	resp, err := http.Get(url)
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	if githubToken == "" {
+		return nil, fmt.Errorf("GITHUB_TOKEN not set")
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header["Authorization"] = []string{"token " + githubToken}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +97,17 @@ func copyImage(image io.Reader, tag string) error {
 		return err
 	}
 
+	imgPath := "/tmp/image"
+
+	files, err := Unzip(imgPath, "/tmp")
+	if err == nil && len(files) > 0 {
+		imgPath = files[0]
+	}
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(files)
+
 	policy, err := signature.NewPolicyFromFile("policy.json")
 	if err != nil {
 		return err
@@ -97,7 +122,7 @@ func copyImage(image io.Reader, tag string) error {
 		return err
 	}
 
-	srcRef, err := alltransports.ParseImageName("docker-archive:/tmp/image")
+	srcRef, err := alltransports.ParseImageName("docker-archive:" + imgPath)
 
 	dstDockerAuth := &types.DockerAuthConfig{
 		Username: username,
@@ -117,4 +142,62 @@ func copyImage(image io.Reader, tag string) error {
 	})
 
 	return err
+}
+
+// Unzip will decompress a zip archive, moving all files and folders
+// within the zip file (parameter 1) to an output directory (parameter 2).
+func Unzip(src string, dest string) ([]string, error) {
+
+	var filenames []string
+
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return filenames, err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+
+		// Store filename/path for returning and using later on
+		fpath := filepath.Join(dest, f.Name)
+
+		// Check for ZipSlip. More Info: http://bit.ly/2MsjAWE
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return filenames, fmt.Errorf("%s: illegal file path", fpath)
+		}
+
+		filenames = append(filenames, fpath)
+
+		if f.FileInfo().IsDir() {
+			// Make Folder
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
+		}
+
+		// Make File
+		if err = os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return filenames, err
+		}
+
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return filenames, err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return filenames, err
+		}
+
+		_, err = io.Copy(outFile, rc)
+
+		// Close the file without defer to close before next iteration of loop
+		outFile.Close()
+		rc.Close()
+
+		if err != nil {
+			return filenames, err
+		}
+	}
+	return filenames, nil
 }
