@@ -3,6 +3,7 @@ package p
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,24 +16,39 @@ import (
 	"github.com/containers/image/v5/types"
 )
 
-type D struct {
+type Invocation struct {
+	Body string `json:"body"`
+}
+
+func (i Invocation) GetData() InvocationBody {
+	body := InvocationBody{}
+	json.Unmarshal([]byte(i.Body), &body)
+
+	return body
+}
+
+type InvocationBody struct {
 	Url string `json:"url"`
 	Tag string `json:"tag"`
 }
 
 // MoveImage downloads the image from url and pushes it to repository configured by env vars
-func MoveImage(ctx context.Context, d D) error {
+func MoveImage(ctx context.Context, i Invocation) error {
+	data := i.GetData()
 
-	if d.Url == "" || d.Tag == "" {
-		return fmt.Errorf("missing arguments")
+	if data.Url == "" {
+		return fmt.Errorf("missing Url")
+	}
+	if data.Tag == "" {
+		return fmt.Errorf("missing Tag")
 	}
 
-	imageReader, err := downloadImage(d.Url)
+	imageReader, err := downloadImage(data.Url)
 	if err != nil {
-		return fmt.Errorf("Failed to download image from %s: %s", d.Url, err.Error())
+		return fmt.Errorf("Failed to download image from %s: %s", data.Url, err.Error())
 	}
 
-	err = copyImage(imageReader, d.Tag)
+	err = copyImage(imageReader, data.Tag)
 	return err
 }
 
